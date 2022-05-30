@@ -1,0 +1,124 @@
+# Example configuration for diridp that lists all available options.
+#
+# Because this file lists all options, it seems long, but many of the
+# non-required options already have sensible defaults and don't need to be
+# specified.
+#
+# General notes:
+# - Durations are in seconds.
+# - Unless otherwise specified, relative paths are resolved against the current
+#   working directory when the process is started.
+
+# Default directory for state, if not overriden by the provider.
+state_dir: "/var/lib/diridp"
+
+# REQUIRED: One or more provider configurations.
+#
+# Each provider entry defines a unique issuer with its own keys. The name of
+# the entry is for logging purposes only.
+providers:
+  main:
+    # REQUIRED: Issuer for the token `iss` claim and the discovery document.
+    issuer: "https://example.com"
+
+    # Directory where keys are stored.
+    #
+    # If not set, derived as: `<state_dir>/<provider>/keys`
+    #
+    # This directory will be created if it does not exist, and permissions will
+    # be set to 0700 (only accessible by the owner).
+    keys_dir: "/var/lib/diridp/test/keys"
+
+    # Duration a key is used, before being rotated.
+    key_lifespan: 86400 # 1 day
+
+    # Duration before and after key lifespan during which the key is still
+    # announced. This should be larger than the Cache-Control age you apply to
+    # the webroot from which public keys are served.
+    #
+    # If not set, derived as: key_lifespan / 4
+    key_publish_margin: 21600
+
+    # Directory where public web files are written.
+    #
+    # If not set, derived as: `<state_dir>/<provider>/webroot`
+    #
+    # This directory will be created if it does not exist.
+    webroot: "/var/lib/diridp/test/webroot"
+
+    # Absolute path within the webroot where the JWKs document is written.
+    jwks_path: "/jwks.json"
+
+    # Absolute URL to the JWKs document, as set in the discovery document.
+    #
+    # If not set, derived as: webroot + jwks_path
+    jwks_uri: "https://example.com/jwks.json"
+
+    # Any additional claims added to all tokens of this provider.
+    #
+    # Note that `iss`, `iat`, `exp` and `nbf` are automatically set.
+    claims:
+      # Just an example. It's often more useful to add claims per-token.
+      locale: "nl-NL"
+
+    # REQUIRED: One or more tokens issued by this provider.
+    tokens:
+
+      -
+        # REQUIRED: Path where to write the token.
+        #
+        # The recommended location is somewhere in `/run/diridp`. Systemd can
+        # create this directory for you with `RuntimeDirectory=`. Diridp does
+        # not otherwise use this directory for anything special, so its
+        # contents are entirely up to you.
+        #
+        # The parent directory of the token itself MUST already exist. This is
+        # a requirement because setting correct permissions on the directory is
+        # essential for security. File permissions on the token itself are NOT
+        # preserved when the token is rotated.
+        #
+        # One solution is to use the systemd option `ExecStartPre=` to run a
+        # script before startup that creates the directories, for example:
+        #
+        #   install -d -o diridp -g my-app -m 0750 /run/diridp/my-application
+        #
+        path: "/run/diridp/my-application/token"
+
+        # Duration the token is valid.
+        lifespan: 3600
+
+        # Duration from the current token creation time after which to rotate
+        # it. This must not be larger than `lifespan`.
+        #
+        # If not set, derived as: lifespan * 3 / 4
+        refresh: 2700
+
+        # Margin to apply to the `nbf` claim.
+        #
+        # This can be used to account for clock skew, though must clients will
+        # also add some margin for the same purpose.
+        nbf_margin: 5
+
+        # Any additional claims to add to this token.
+        #
+        # Note that `iss`, `iat`, `exp` and `nbf` are automatically set.
+        #
+        # If provider claims were specified, these are applied on top.
+        claims:
+          # RECOMMENDED: Clients typically require `sub` and `aud` claims.
+          sub: "my-application"
+          aud: "some-cloud-service.example.com"
+
+      -
+        # Alternative: path with a parameter.
+        #
+        # A claim is added to the token matching the parameter name, in this
+        # example: `sub`. Currently, only one parameter is supported in the
+        # next-to-last position, as shown in this example.
+        #
+        # The parent directory `/path/to/some/directory` MUST already exist.
+        # This directory will be monitored, and tokens will be generated for
+        # all subdirectories inside it.
+        path: "/run/diridp/applications/:sub/token"
+        claims:
+          aud: "some-cloud-service.example.com"

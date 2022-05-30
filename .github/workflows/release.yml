@@ -1,0 +1,43 @@
+name: release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        default: true
+
+    - name: Install cross
+      run: cargo install cross
+
+    - name: Build
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        tag_name: ${{ github.event.release.tag_name }}
+        archs: x86_64 aarch64
+      run: |
+        for arch in $archs; do
+          echo "::group::Building for ${arch}"
+
+          target="${arch}-unknown-linux-gnu"
+          cross build --release --locked --target "${target}"
+
+          package="diridp-${tag_name}-linux-${arch}.tgz"
+          tar -czf "$package" -C "target/$target/release/" diridp
+          gh release upload "${tag_name}" "${package}"
+
+          echo "::endgroup::"
+        done

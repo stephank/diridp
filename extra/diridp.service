@@ -1,0 +1,67 @@
+# Example systemd unit file for diridp
+
+[Unit]
+Description=diridp
+After=fs.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+# The `-s` option enables syslog prefixing of output, which systemd parses.
+# Note that output is still sent to stderr.
+ExecStart=/usr/local/bin/diridp -s /etc/diridp/config.yaml
+Restart=always
+RestartSec=10
+
+# It's useful to have script run beforehand that ensures directories have the
+# correct permissions. The `+` prefix runs the script as root, regardless of
+# the `User=` setting. An example script could be:
+#
+#   #/bin/sh
+#   set -e
+#   install -d -o diridp -g my-app -m 0750 /run/diridp/my-application
+#
+ExecStartPre=+/etc/diridp/create-dirs.sh
+
+# Creates `/var/lib/diridp`.
+# This matches the default storage location for keys and web files.
+StateDirectory = "diridp";
+
+# These are recommended options to limit diridp to just `/run/diridp`. The
+# directory is not used by diridp itself, but is the recommended location for
+# token paths in your diridp configuration.
+#
+# Disabling some of these options can be useful when tokens need to be placed
+# in other filesystem locations for compatibility.
+User=diridp
+RuntimeDirectory=diridp
+RuntimeDirectoryPreserve=true
+PrivateTmp=true
+ProtectSystem=strict
+
+# These all enable additional sandboxing for functionality diridp doesn't use.
+# Notably, it doesn't require any network access at all.
+CapabilityBoundingSet=
+IPAddressDeny=any
+LockPersonality=true
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectProc=noaccess
+RemoveIPC=true
+RestrictAddressFamilies=none
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
