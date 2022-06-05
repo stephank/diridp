@@ -9,7 +9,7 @@ as follows:
     let
       diridp = fetchTarball {
         # Modify the version as needed.
-        url = "https://github.com/stephank/diridp/archive/0.1.0.tar.gz";
+        url = "https://github.com/stephank/diridp/archive/v0.1.0.tar.gz";
         # Obtain with: `nix-prefetch-url --unpack <url>`
         sha256 = "...";
       };
