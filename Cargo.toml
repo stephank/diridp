@@ -2,6 +2,8 @@
 name = "diridp"
 version = "0.1.0"
 license = "MIT"
+description = "OIDC IdP that issues tokens as local files"
+repository = "https://github.com/stephank/diridp"
 edition = "2021"
 
 [profile.release]
