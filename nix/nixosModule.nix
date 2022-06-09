@@ -313,15 +313,17 @@ in {
             };
           in {
             name = vhostFromIssuer provider.issuer;
-            value = {
-              locations."= /.well-known/openid-configuration" = locationConfig;
-              locations."= /jwks.json" = locationConfig;
-            }
-              // optionalAttrs (!provider.vhost.locationsOnly) {
+            value = mkMerge [
+              {
+                locations."= /.well-known/openid-configuration" = locationConfig;
+                locations."= /jwks.json" = locationConfig;
+              }
+              (mkIf (!provider.vhost.locationsOnly) {
                 enableACME = true;
                 forceSSL = true;
                 locations."/".return = "404";
-              };
+              })
+            ];
         };
         providersWithVhost = filterAttrs
           (name: provider: provider.vhost.nginx)
