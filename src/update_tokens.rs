@@ -140,9 +140,13 @@ where
     match fs::metadata(&token_file) {
         Ok(meta) => {
             let age = now
-                .duration_since(meta.created().with_context(|| {
-                    format!("Modification time not available for {token_file:?}")
-                })?)
+                .duration_since(
+                    meta.created()
+                        .or_else(|_| meta.modified())
+                        .with_context(|| {
+                            format!("Creation time not available for {token_file:?}")
+                        })?,
+                )
                 .unwrap_or(Duration::ZERO);
             if age < token.refresh {
                 // Expires in the future. Update our timer if necessary.
