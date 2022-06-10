@@ -37,6 +37,7 @@ StateDirectory = "diridp";
 User=diridp
 RuntimeDirectory=diridp
 RuntimeDirectoryPreserve=true
+PrivateHome=true
 PrivateTmp=true
 ProtectSystem=strict
 

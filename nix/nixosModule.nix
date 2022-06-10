@@ -293,6 +293,7 @@ in {
       }
         // optionalAttrs cfg.sandbox {
           User = "diridp";
+          ProtectHome = true;
           PrivateTmp = true;
           ProtectSystem = "strict";
           RuntimeDirectory = "diridp";
