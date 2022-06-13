@@ -310,6 +310,7 @@ in {
               extraConfig = ''
                 types { }
                 default_type application/json;
+                add_header cache-control "public, max-age=3600, s-maxage=600";
               '';
             };
           in {

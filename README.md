@@ -47,6 +47,10 @@ server {
   root /var/lib/diridp/main/webroot;
   types { }
   default_type application/json;
+
+  # This is a decent default matching diridp config defaults. A good rule of
+  # thumb when adjusting this: `max-age + 3 * s-maxage <= key_publish_margin`
+  add_header cache-control "public, max-age=3600, s-maxage=600";
 }
 ```
 
@@ -58,6 +62,7 @@ location = /.well-known/openid-configuration {
   root /var/lib/diridp/main/webroot;
   types { }
   default_type application/json;
+  add_header cache-control "public, max-age=3600, s-maxage=600";
 }
 
 # This path can be customized with the `jwks_path` option in diridp config.
@@ -65,6 +70,7 @@ location = /jwks.json {
   root /var/lib/diridp/main/webroot;
   types { }
   default_type application/json;
+  add_header cache-control "public, max-age=3600, s-maxage=600";
 }
 ```
 
