@@ -121,9 +121,10 @@ resource "aws_iam_role" "example_role" {
           Federated = aws_iam_openid_connect_provider.example_idp.arn
         }
         Condition = {
-          # This limits the role to tokens with a matching `sub` claim.
           StringLike = {
+            # Limit this role to tokens with matching `sub` and `aud` claims.
             "${local.example_idp_host}:sub" = "my-application"
+            "${local.example_idp_host}:aud" = "sts.amazonaws.com"
           }
         }
       }
