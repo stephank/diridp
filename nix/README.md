@@ -9,9 +9,9 @@ as follows:
     let
       diridp = fetchTarball {
         # Modify the version as needed.
-        url = "https://github.com/stephank/diridp/archive/v0.1.0.tar.gz";
+        url = "https://github.com/stephank/diridp/archive/v0.1.1.tar.gz";
         # Obtain with: `nix-prefetch-url --unpack <url>`
-        sha256 = "...";
+        sha256 = "19qc6k1srnamnw807pqgfg7rp00wn67jx60vikz7k7ia5snykvs9";
       };
     in [
       "${diridp}/nix/nixosModule.nix"
