@@ -26,7 +26,7 @@ ExecStartPre=+/etc/diridp/create-dirs.sh
 
 # Creates `/var/lib/diridp`.
 # This matches the default storage location for keys and web files.
-StateDirectory = "diridp";
+StateDirectory=diridp
 
 # These are recommended options to limit diridp to just `/run/diridp`. The
 # directory is not used by diridp itself, but is the recommended location for
