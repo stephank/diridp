@@ -4,7 +4,9 @@ use std::{
 };
 
 use serde::{de::Error, Deserialize, Deserializer};
-use serde_json::Value;
+use serde_json::{Map, Value};
+
+use crate::algs::{Algorithm, MATCHERS};
 
 /// Format of the `diridp.yaml` file.
 #[derive(Deserialize)]
@@ -18,16 +20,13 @@ pub struct Top {
 pub struct Provider {
     pub issuer: String,
 
-    pub keys_dir: Option<PathBuf>,
-    #[serde(default = "default_provider_key_lifespan")]
-    pub key_lifespan: u64,
-    pub key_publish_margin: Option<u64>,
-
     pub webroot: Option<PathBuf>,
     #[serde(deserialize_with = "deserialize_web_path")]
     #[serde(default = "default_provider_jwks_path")]
     pub jwks_path: String,
     pub jwks_uri: Option<String>,
+
+    pub keys: HashMap<String, KeyChain>,
 
     #[serde(default)]
     pub claims: HashMap<String, Value>,
@@ -37,8 +36,19 @@ pub struct Provider {
 }
 
 #[derive(Deserialize)]
+pub struct KeyChain {
+    pub dir: Option<PathBuf>,
+    #[serde(default = "default_provider_key_lifespan")]
+    pub lifespan: u64,
+    pub publish_margin: Option<u64>,
+    #[serde(flatten, deserialize_with = "deserialize_algorithm")]
+    pub alg: Box<dyn Algorithm>,
+}
+
+#[derive(Deserialize)]
 pub struct Token {
     pub path: TokenPath,
+    pub key_name: Option<String>,
     #[serde(default = "default_token_lifespan")]
     pub lifespan: u64,
     pub refresh: Option<u64>,
@@ -137,4 +147,33 @@ impl<'de> Deserialize<'de> for TokenPath {
             Ok(TokenPath::SingleFile { path })
         }
     }
+}
+
+fn deserialize_algorithm<'de, D>(deserializer: D) -> Result<Box<dyn Algorithm>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct AlgConfig {
+        alg: String,
+        #[serde(flatten)]
+        rest: Map<String, Value>,
+    }
+    let config = AlgConfig::deserialize(deserializer)?;
+
+    let mut matched_iter = MATCHERS
+        .iter()
+        .filter(|matcher| matcher.matches_config(&config.alg, &config.rest));
+    let matched = matched_iter
+        .next()
+        .ok_or_else(|| D::Error::custom("did not match any algorithm implementation"))?;
+    if matched_iter.next().is_some() {
+        return Err(D::Error::custom(
+            "matched multiple algorithm implementations",
+        ));
+    }
+
+    matched
+        .create_algorithm(config.rest)
+        .map_err(D::Error::custom)
 }

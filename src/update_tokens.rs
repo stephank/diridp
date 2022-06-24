@@ -7,9 +7,6 @@ use std::{
 };
 
 use anyhow::{Context, Error, Result};
-use digest::Digest;
-use rsa::Hash;
-use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
@@ -163,19 +160,14 @@ where
         }
     }
 
-    let key_pair = provider.current.clone();
+    let key_chain = provider
+        .keys
+        .get(&token.key_name)
+        .expect("Key missing for token, should've been check at init-time");
+    let key_pair = key_chain.current.clone();
 
     // Build the JWT.
-    #[derive(Serialize)]
-    struct Header<'a> {
-        kid: &'a str,
-        alg: &'a str,
-    }
-    let header = serde_json::to_string(&Header {
-        kid: &key_pair.id,
-        alg: "RS256",
-    })
-    .expect("Failed to serialize JWT header");
+    let header = key_chain.alg.create_header(&key_pair.id, &key_pair.inner);
 
     let mut payload = claims_fn();
     payload.insert("iat".to_string(), unix_time(now).into());
@@ -187,14 +179,9 @@ where
     data.push_str(&base64url(header.as_bytes()));
     data.push('.');
     data.push_str(&base64url(payload.as_bytes()));
-    let sig = key_pair
-        .inner
-        .sign(
-            rsa::PaddingScheme::PKCS1v15Sign {
-                hash: Some(Hash::SHA2_256),
-            },
-            &sha2::Sha256::digest(data.as_bytes()),
-        )
+    let sig = key_chain
+        .alg
+        .sign(data.as_bytes(), &key_pair.inner)
         .context("Failed to sign JWT")?;
     data.push('.');
     data.push_str(&base64url(&sig));

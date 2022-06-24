@@ -9,10 +9,10 @@ use std::{
 
 use anyhow::{Context, Result};
 use rand::Rng;
-use rsa::{pkcs8::EncodePrivateKey, RsaPrivateKey};
 use serde_json::json;
 
 use crate::{
+    algs::Algorithm,
     key_index, log, state,
     util::{atomic_write, min_opt, unix_time},
 };
@@ -21,10 +21,27 @@ use crate::{
 pub fn check(state: &mut state::Top, next_check: &mut Option<SystemTime>) {
     *next_check = None;
     for provider in &mut state.providers {
-        match check_provider(provider) {
-            Ok(time) => min_opt(next_check, time),
-            Err(err) => {
-                log::error!("Failed to update provider '{}': {}", provider.name, err);
+        let mut keys_changed = false;
+        for key_chain in provider.keys.values_mut() {
+            if let Err(err) =
+                check_key_chain(&provider.name, key_chain, &mut keys_changed, next_check)
+            {
+                log::error!(
+                    "Failed to update key '{}' / '{}': {}",
+                    provider.name,
+                    key_chain.name,
+                    err
+                );
+            }
+        }
+
+        if keys_changed {
+            if let Err(err) = write_jwks(provider) {
+                log::error!(
+                    "Failed to write JWKs document {:?}: {}",
+                    provider.jwks_path,
+                    err,
+                );
             }
         }
     }
@@ -32,57 +49,72 @@ pub fn check(state: &mut state::Top, next_check: &mut Option<SystemTime>) {
 
 /// Check if a provider's signing keys need to be rotated.
 /// Returns the next update time.
-pub fn check_provider(provider: &mut state::Provider) -> Result<SystemTime> {
+pub fn check_key_chain(
+    provider_name: &str,
+    key_chain: &mut state::KeyChain,
+    keys_changed: &mut bool,
+    next_check: &mut Option<SystemTime>,
+) -> Result<()> {
     let now = SystemTime::now();
 
     // Remove an expired next key first, to simplify remaining checks.
     // This can happen if we load a very old state.
-    if provider
+    if key_chain
         .next
         .as_ref()
         .filter(|key_chain| now > key_chain.expires)
         .is_some()
     {
         // Possibly cleaned up later on.
-        provider.old.push(provider.next.take().unwrap());
+        key_chain.old.push(key_chain.next.take().unwrap());
+        *keys_changed = true;
     }
 
     // Replace an expired current key.
-    if now > provider.current.expires {
+    if now > key_chain.current.expires {
         // Possibly cleaned up later on, if very old.
-        provider.old.push(provider.current.clone());
+        key_chain.old.push(key_chain.current.clone());
 
-        if let Some(next) = provider.next.take() {
-            provider.current = next;
+        if let Some(next) = key_chain.next.take() {
+            key_chain.current = next;
             log::info!(
-                "Rotated current key to '{}' for provider '{}'",
-                provider.current.id,
-                provider.name
+                "Rotated '{}' / '{}' current key to '{}'",
+                provider_name,
+                key_chain.name,
+                key_chain.current.id,
             );
         } else {
-            provider.current = Arc::new(generate(
+            key_chain.current = Arc::new(generate(
                 "current",
-                &provider.name,
-                &provider.keys_dir,
-                now + provider.key_lifespan,
+                provider_name,
+                &key_chain.name,
+                &*key_chain.alg,
+                &key_chain.keys_dir,
+                now + key_chain.lifespan,
             )?);
         }
+
+        *keys_changed = true;
     }
 
     // Check if we need to generate a new next key.
-    if provider.next.is_none() && now > (provider.current.expires - provider.key_publish_margin) {
-        provider.next = Some(Arc::new(generate(
+    if key_chain.next.is_none() && now > (key_chain.current.expires - key_chain.publish_margin) {
+        key_chain.next = Some(Arc::new(generate(
             "next",
-            &provider.name,
-            &provider.keys_dir,
+            provider_name,
+            &key_chain.name,
+            &*key_chain.alg,
+            &key_chain.keys_dir,
             // Relative to the expiry of our current key pair.
-            provider.current.expires + provider.key_lifespan,
+            key_chain.current.expires + key_chain.lifespan,
         )?));
+
+        *keys_changed = true;
     }
 
     // Truncate old keys.
-    let cutoff = now - provider.key_publish_margin;
-    provider.old.retain(|key_pair| {
+    let cutoff = now - key_chain.publish_margin;
+    key_chain.old.retain(|key_pair| {
         if key_pair.expires > cutoff {
             true
         } else {
@@ -93,11 +125,13 @@ pub fn check_provider(provider: &mut state::Provider) -> Result<SystemTime> {
                 }
             } else {
                 log::info!(
-                    "Deleted old key '{}' for provider '{}'",
+                    "Deleted old key pair '{}' / '{}' / '{}'",
+                    provider_name,
+                    key_chain.name,
                     key_pair.id,
-                    provider.name
                 );
             }
+            *keys_changed = true;
             false
         }
     });
@@ -111,57 +145,74 @@ pub fn check_provider(provider: &mut state::Provider) -> Result<SystemTime> {
         }
     }
     let index = serde_json::to_vec(&key_index::Top {
-        current: Some(make_index_entry(&provider.current)),
-        next: provider.next.as_ref().map(make_index_entry),
-        old: provider.old.iter().map(make_index_entry).collect(),
+        current: Some(make_index_entry(&key_chain.current)),
+        next: key_chain.next.as_ref().map(make_index_entry),
+        old: key_chain.old.iter().map(make_index_entry).collect(),
     })
     .expect("Failed to serialize key index");
-    atomic_write(&provider.index_path, &index)
-        .with_context(|| format!("Failed to write index file {:?}", provider.index_path))?;
-    log::debug!("Wrote index file {:?}", provider.index_path);
+    atomic_write(&key_chain.index_path, &index)
+        .with_context(|| format!("Failed to write index file {:?}", key_chain.index_path))?;
+    log::debug!("Wrote index file {:?}", key_chain.index_path);
 
-    // Write JWKs. Use atomic write, because a webserver may be serving these.
-    let jwks: Vec<_> = provider.iter_keys().map(state::KeyPair::to_jwk).collect();
+    // Determine next check time.
+    min_opt(next_check, {
+        let mut next_check = key_chain.current.expires;
+        if key_chain.next.is_none() {
+            next_check -= key_chain.publish_margin;
+        }
+        key_chain.old.iter().fold(next_check, |acc, key_pair| {
+            min(acc, key_pair.expires + key_chain.publish_margin)
+        })
+    });
+
+    Ok(())
+}
+
+// Write the JWKs JSON for a provider.
+pub fn write_jwks(provider: &state::Provider) -> Result<()> {
+    // Use atomic write, because a webserver may be serving these.
+    let jwks: Vec<_> = provider
+        .keys
+        .values()
+        .flat_map(|key_chain| key_chain.iter().map(|key| key.to_jwk(&*key_chain.alg)))
+        .collect();
+
     atomic_write(
         &provider.jwks_path,
         serde_json::to_string_pretty(&json!({ "keys": jwks }))
             .expect("Failed to serialize JWKs document")
             .as_bytes(),
-    )
-    .with_context(|| format!("Failed to write JWKs document {:?}", provider.jwks_path))?;
+    )?;
     log::debug!("Wrote JWKs document {:?}", provider.jwks_path);
 
-    // Determine next check time.
-    let mut next_check = provider.current.expires;
-    if provider.next.is_none() {
-        next_check -= provider.key_publish_margin;
-    }
-    Ok(provider.old.iter().fold(next_check, |acc, key_pair| {
-        min(acc, key_pair.expires + provider.key_publish_margin)
-    }))
+    Ok(())
 }
 
 /// Generate a new key pair and write it to a file.
 pub fn generate(
     purpose: &str,
     provider_name: &str,
+    key_name: &str,
+    alg: &dyn Algorithm,
     keys_dir: &Path,
     expires: SystemTime,
 ) -> Result<state::KeyPair> {
     let mut rng = rand::thread_rng();
-
-    let inner = RsaPrivateKey::new(&mut rng, 2048).context("Failed to generate RSA key pair")?;
     let id = {
         let bytes: [u8; 8] = rng.gen();
         format!("{:x}", u64::from_be_bytes(bytes))
     };
 
     let path = path_for_key_id(keys_dir, &id);
-    inner
-        .write_pkcs8_pem_file(&path, Default::default())
-        .with_context(|| format!("Failed to write RSA key pair to {path:?}"))?;
+    let inner = alg.generate(&path)?;
 
-    log::info!("Generated new RSA key pair '{id}', {purpose} key for provider '{provider_name}'");
+    log::info!(
+        "Generated new key pair '{}' / '{}' / '{}' ({})",
+        provider_name,
+        key_name,
+        id,
+        purpose
+    );
 
     Ok(state::KeyPair {
         id,
@@ -171,9 +222,8 @@ pub fn generate(
     })
 }
 
-/// Build the file path for a key pair.
-pub fn path_for_key_id(keys_dir: &Path, id: &str) -> PathBuf {
+pub fn path_for_key_id(keys_dir: &Path, kid: &str) -> PathBuf {
     let mut path = keys_dir.to_path_buf();
-    path.push(format!("key-{id}.pem"));
+    path.push(format!("key-{}.pem", kid));
     path
 }
