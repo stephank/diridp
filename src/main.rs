@@ -9,6 +9,9 @@ mod update_keys;
 mod update_tokens;
 mod util;
 
+#[cfg(test)]
+mod test;
+
 use std::{
     fs::{self, Permissions},
     io::ErrorKind,

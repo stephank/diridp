@@ -40,7 +40,22 @@ jobs:
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --locked
+          args: --release --locked
+
+      - name: cargo build
+        run: cargo build --release --locked
+
+      - name: npm cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: npm install
+        working-directory: ./src/test/helper/
+        run: npm install
 
       - name: cargo test
-        run: cargo test --locked
+        run: cargo test --release --locked
