@@ -1,7 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use anyhow::{Context, Error, Result};
-use digest::Digest;
+use digest::{Digest, DynDigest};
 use rsa::{
     pkcs8::{DecodePrivateKey, EncodePrivateKey},
     Hash, PublicKeyParts, RsaPrivateKey,
@@ -25,7 +25,10 @@ pub struct RsaAlg {
 
 impl AlgorithmMatcher for RsaMatcher {
     fn matches_config(&self, alg: &str, _rest: &Map<String, Value>) -> bool {
-        matches!(alg, "RS256" | "RS384" | "RS512")
+        matches!(
+            alg,
+            "RS256" | "RS384" | "RS512" | "PS256" | "PS384" | "PS512"
+        )
     }
 
     fn create_algorithm(
@@ -79,19 +82,36 @@ impl Algorithm for RsaAlg {
 
     fn sign(&self, data: &[u8], key: &KeyHandle) -> Result<Vec<u8>> {
         let key = key.clone().downcast::<RsaPrivateKey>().unwrap();
-        let (hash, hash_kind) = match self.alg.as_str() {
-            "RS256" => (sha2::Sha256::digest(data).to_vec(), Hash::SHA2_256),
-            "RS384" => (sha2::Sha384::digest(data).to_vec(), Hash::SHA2_384),
-            "RS512" => (sha2::Sha512::digest(data).to_vec(), Hash::SHA2_512),
+
+        let (mut hasher, hash_kind): (Box<dyn DynDigest>, Hash) = match self.alg.as_str() {
+            "RS256" | "PS256" => (Box::new(sha2::Sha256::new()), Hash::SHA2_256),
+            "RS384" | "PS384" => (Box::new(sha2::Sha384::new()), Hash::SHA2_384),
+            "RS512" | "PS512" => (Box::new(sha2::Sha512::new()), Hash::SHA2_512),
             _ => unreachable!(),
         };
-        key.sign(
-            rsa::PaddingScheme::PKCS1v15Sign {
+
+        // Reset the hasher in case we use PSS padding, so it can be reused, because we want the
+        // MGF1 digest algorithm to match the message digest algorithm.
+        hasher.update(data);
+        let hash = hasher.finalize_reset();
+
+        let padding = match self.alg.as_str() {
+            "RS256" | "RS384" | "RS512" => rsa::PaddingScheme::PKCS1v15Sign {
                 hash: Some(hash_kind),
             },
-            &hash,
-        )
-        .map_err(Error::new)
+            "PS256" | "PS384" | "PS512" => {
+                // Salt length should match message digest length.
+                let salt_len = hasher.output_size();
+                rsa::PaddingScheme::PSS {
+                    salt_rng: Box::new(rand::thread_rng()),
+                    digest: hasher,
+                    salt_len: Some(salt_len),
+                }
+            }
+            _ => unreachable!(),
+        };
+
+        key.sign(padding, &hash).map_err(Error::new)
     }
 }
 

@@ -89,5 +89,20 @@ fn rs384() -> Result<()> {
 
 #[test]
 fn rs512() -> Result<()> {
-    run_alg_test("RS512")
+    run_alg_test("RS384")
+}
+
+#[test]
+fn ps256() -> Result<()> {
+    run_alg_test("PS256")
+}
+
+#[test]
+fn ps384() -> Result<()> {
+    run_alg_test("PS384")
+}
+
+#[test]
+fn ps512() -> Result<()> {
+    run_alg_test("PS384")
 }
