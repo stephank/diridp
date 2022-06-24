@@ -126,6 +126,16 @@ fn ps512() -> Result<()> {
 }
 
 #[test]
-fn test_es256() -> Result<()> {
+fn es256() -> Result<()> {
     run_alg_test(Box::new(algs::Es256Alg))
+}
+
+#[test]
+fn es384() -> Result<()> {
+    run_alg_test(Box::new(algs::Es384Alg))
+}
+
+#[test]
+fn es256k() -> Result<()> {
+    run_alg_test(Box::new(algs::Es256kAlg))
 }
