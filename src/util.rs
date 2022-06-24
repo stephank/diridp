@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use base64ct::Encoding;
 
 /// Returns a Unix timestamp in seconds for the given `SystemTime`.
 ///
@@ -20,7 +21,7 @@ pub fn unix_time(input: SystemTime) -> u64 {
 /// Returns a JWT-compatible base64url encoding of some data.
 #[inline]
 pub fn base64url(data: &[u8]) -> String {
-    base64::encode_config(data, base64::URL_SAFE_NO_PAD)
+    base64ct::Base64UrlUnpadded::encode_string(data)
 }
 
 /// Update a value to the lower of two values. A `None` is treated as infinity.

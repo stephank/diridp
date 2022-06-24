@@ -1,3 +1,4 @@
+mod es256;
 mod rsa;
 
 use std::{any::Any, path::Path, sync::Arc};
@@ -5,6 +6,7 @@ use std::{any::Any, path::Path, sync::Arc};
 use anyhow::Result;
 use serde_json::{Map, Value};
 
+pub use self::es256::*;
 pub use self::rsa::*;
 
 /// Trait object used to find the correct algorithm matching a key configuration.
@@ -39,4 +41,4 @@ pub trait Algorithm: Send + Sync {
 pub type KeyHandle = Arc<dyn Any + Send + Sync>;
 
 /// List of all AlgorithmMatchers.
-pub const MATCHERS: &[&dyn AlgorithmMatcher] = &[&rsa::RsaMatcher];
+pub const MATCHERS: &[&dyn AlgorithmMatcher] = &[&es256::Es256Matcher, &rsa::RsaMatcher];

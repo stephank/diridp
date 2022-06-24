@@ -2,9 +2,12 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 
 use anyhow::{ensure, Context, Result};
 
-use crate::{algs, config, log};
+use crate::{
+    algs::{self, Algorithm},
+    config, log,
+};
 
-fn run_alg_test(alg: &str) -> Result<()> {
+fn run_alg_test(alg: Box<dyn Algorithm>) -> Result<()> {
     log::LEVEL.store(log::LEVEL_DEBUG, Ordering::Relaxed);
 
     let work_dir = tempfile::tempdir().context("Failed to create tempdir")?;
@@ -43,10 +46,7 @@ fn run_alg_test(alg: &str) -> Result<()> {
         dir: None,
         lifespan: 86400,
         publish_margin: None,
-        alg: Box::new(algs::RsaAlg {
-            alg: alg.into(),
-            key_size: 2048,
-        }),
+        alg,
     };
     let mut token = config::Token {
         path: config::TokenPath::SingleFile {
@@ -79,30 +79,53 @@ fn run_alg_test(alg: &str) -> Result<()> {
 
 #[test]
 fn rs256() -> Result<()> {
-    run_alg_test("RS256")
+    run_alg_test(Box::new(algs::RsaAlg {
+        alg: "RS256".into(),
+        key_size: 2048,
+    }))
 }
 
 #[test]
 fn rs384() -> Result<()> {
-    run_alg_test("RS384")
+    run_alg_test(Box::new(algs::RsaAlg {
+        alg: "RS384".into(),
+        key_size: 2048,
+    }))
 }
 
 #[test]
 fn rs512() -> Result<()> {
-    run_alg_test("RS384")
+    run_alg_test(Box::new(algs::RsaAlg {
+        alg: "RS512".into(),
+        key_size: 2048,
+    }))
 }
 
 #[test]
 fn ps256() -> Result<()> {
-    run_alg_test("PS256")
+    run_alg_test(Box::new(algs::RsaAlg {
+        alg: "PS256".into(),
+        key_size: 2048,
+    }))
 }
 
 #[test]
 fn ps384() -> Result<()> {
-    run_alg_test("PS384")
+    run_alg_test(Box::new(algs::RsaAlg {
+        alg: "PS384".into(),
+        key_size: 2048,
+    }))
 }
 
 #[test]
 fn ps512() -> Result<()> {
-    run_alg_test("PS384")
+    run_alg_test(Box::new(algs::RsaAlg {
+        alg: "PS512".into(),
+        key_size: 2048,
+    }))
+}
+
+#[test]
+fn test_es256() -> Result<()> {
+    run_alg_test(Box::new(algs::Es256Alg))
 }

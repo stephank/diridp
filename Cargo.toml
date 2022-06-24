@@ -11,10 +11,12 @@ overflow-checks = true
 
 [dependencies]
 anyhow = "1.0.57"
-base64 = "0.13.0"
+base64ct = { version = "1.5.0", features = ["alloc"] }
 clap = { version = "3.1.18", features = ["derive"] }
 digest = "0.10.3"
+elliptic-curve = { version = "0.12.1", features = ["pem"] }
 notify = "5.0.0-pre.15"
+p256 = "0.11.1"
 rand = "0.8.5"
 rsa = "0.6.1"
 serde = { version = "1.0.137", features = ["derive"] }
