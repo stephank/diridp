@@ -174,6 +174,6 @@ where
     }
 
     matched
-        .create_algorithm(config.rest)
+        .create_algorithm(config.alg, config.rest)
         .map_err(D::Error::custom)
 }

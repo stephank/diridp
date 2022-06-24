@@ -13,7 +13,8 @@ pub trait AlgorithmMatcher {
     fn matches_config(&self, alg: &str, rest: &Map<String, Value>) -> bool;
 
     /// Create the Algorithm impl from key configuration.
-    fn create_algorithm(&self, rest: Map<String, Value>) -> Result<Box<dyn Algorithm>>;
+    fn create_algorithm(&self, alg: String, rest: Map<String, Value>)
+        -> Result<Box<dyn Algorithm>>;
 }
 
 /// Trait object that holds algorithm parameters and implements algorithm details.

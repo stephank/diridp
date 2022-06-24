@@ -4,8 +4,7 @@ use anyhow::{ensure, Context, Result};
 
 use crate::{algs, config, log};
 
-#[test]
-fn test_rsa() -> Result<()> {
+fn run_alg_test(alg: &str) -> Result<()> {
     log::LEVEL.store(log::LEVEL_DEBUG, Ordering::Relaxed);
 
     let work_dir = tempfile::tempdir().context("Failed to create tempdir")?;
@@ -44,7 +43,10 @@ fn test_rsa() -> Result<()> {
         dir: None,
         lifespan: 86400,
         publish_margin: None,
-        alg: Box::new(algs::RsaAlg { key_size: 2048 }),
+        alg: Box::new(algs::RsaAlg {
+            alg: alg.into(),
+            key_size: 2048,
+        }),
     };
     let mut token = config::Token {
         path: config::TokenPath::SingleFile {
@@ -73,4 +75,19 @@ fn test_rsa() -> Result<()> {
     ensure!(status.success(), "Verification helper failed");
 
     Ok(())
+}
+
+#[test]
+fn rs256() -> Result<()> {
+    run_alg_test("RS256")
+}
+
+#[test]
+fn rs384() -> Result<()> {
+    run_alg_test("RS384")
+}
+
+#[test]
+fn rs512() -> Result<()> {
+    run_alg_test("RS512")
 }

@@ -17,18 +17,25 @@ pub struct RsaMatcher;
 
 #[derive(Deserialize)]
 pub struct RsaAlg {
+    #[serde(skip)]
+    pub alg: String,
     #[serde(default = "default_key_size")]
     pub key_size: usize,
 }
 
 impl AlgorithmMatcher for RsaMatcher {
     fn matches_config(&self, alg: &str, _rest: &Map<String, Value>) -> bool {
-        matches!(alg, "RS256")
+        matches!(alg, "RS256" | "RS384" | "RS512")
     }
 
-    fn create_algorithm(&self, rest: Map<String, Value>) -> Result<Box<dyn Algorithm>> {
-        let alg: RsaAlg = serde_json::from_value(Value::Object(rest)).map_err(Error::new)?;
-        Ok(Box::new(alg))
+    fn create_algorithm(
+        &self,
+        alg: String,
+        rest: Map<String, Value>,
+    ) -> Result<Box<dyn Algorithm>> {
+        let mut res: RsaAlg = serde_json::from_value(Value::Object(rest)).map_err(Error::new)?;
+        res.alg = alg;
+        Ok(Box::new(res))
     }
 }
 
@@ -56,7 +63,7 @@ impl Algorithm for RsaAlg {
             "kid": kid,
             "use": "sig",
             "kty": "RSA",
-            "alg": "RS256",
+            "alg": self.alg,
             "n": base64url(&key.n().to_bytes_be()),
             "e": base64url(&key.e().to_bytes_be()),
         })
@@ -65,18 +72,24 @@ impl Algorithm for RsaAlg {
     fn create_header(&self, kid: &str, _key: &KeyHandle) -> String {
         serde_json::to_string(&json!({
             "kid": kid,
-            "alg": "RS256",
+            "alg": &self.alg,
         }))
         .expect("Failed to serialize JWT header")
     }
 
     fn sign(&self, data: &[u8], key: &KeyHandle) -> Result<Vec<u8>> {
         let key = key.clone().downcast::<RsaPrivateKey>().unwrap();
+        let (hash, hash_kind) = match self.alg.as_str() {
+            "RS256" => (sha2::Sha256::digest(data).to_vec(), Hash::SHA2_256),
+            "RS384" => (sha2::Sha384::digest(data).to_vec(), Hash::SHA2_384),
+            "RS512" => (sha2::Sha512::digest(data).to_vec(), Hash::SHA2_512),
+            _ => unreachable!(),
+        };
         key.sign(
             rsa::PaddingScheme::PKCS1v15Sign {
-                hash: Some(Hash::SHA2_256),
+                hash: Some(hash_kind),
             },
-            &sha2::Sha256::digest(data),
+            &hash,
         )
         .map_err(Error::new)
     }
