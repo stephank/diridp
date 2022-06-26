@@ -79,10 +79,7 @@ fn main() -> Result<()> {
     let mut next_tokens_check = None;
 
     // Build initial state from config.
-    let cfg =
-        fs::read(&args.config).with_context(|| format!("Failed to read {:?}", args.config))?;
-    let cfg: config::Top = serde_yaml::from_slice(&cfg)
-        .with_context(|| format!("Failed to parse {:?}", args.config))?;
+    let cfg = read_config(&args.config)?;
     let state = Arc::new(RwLock::new(init_state(
         cfg,
         &mut watcher,
@@ -171,6 +168,12 @@ fn main() -> Result<()> {
             );
         }
     }
+}
+
+/// Read and parse a config file.
+pub fn read_config(path: &Path) -> Result<config::Top> {
+    let cfg = fs::read(path).with_context(|| format!("Failed to read {path:?}"))?;
+    serde_yaml::from_slice(&cfg).with_context(|| format!("Failed to parse {path:?}"))
 }
 
 /// Build state from config and perform a full initial check on keys and tokens.
