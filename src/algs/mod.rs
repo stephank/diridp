@@ -1,4 +1,5 @@
 mod ecdsa;
+mod ed25519;
 mod rsa;
 
 use std::{any::Any, path::Path, sync::Arc};
@@ -7,6 +8,7 @@ use anyhow::Result;
 use serde_json::{Map, Value};
 
 pub use self::ecdsa::*;
+pub use self::ed25519::*;
 pub use self::rsa::*;
 
 /// Trait object used to find the correct algorithm matching a key configuration.
@@ -42,4 +44,4 @@ pub type KeyHandle = Arc<dyn Any + Send + Sync>;
 
 /// List of all AlgorithmMatchers.
 pub const MATCHERS: &[&dyn AlgorithmMatcher] =
-    &[&ecdsa::Es256Matcher, &ecdsa::Es384Matcher, &rsa::RsaMatcher];
+    &[&Es256Matcher, &Es384Matcher, &Ed25519Matcher, &RsaMatcher];

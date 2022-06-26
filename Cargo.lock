@@ -177,6 +177,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "curve25519-dalek"
+version = "4.0.0-pre.3"
+source = "git+https://github.com/nazar-pc/curve25519-dalek.git?branch=relax-zeroize#8e5a07bdbf6c0c4bc450ac42e8c7cea9cfa64934"
+dependencies = [
+ "byteorder",
+ "digest",
+ "rand_core",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "der"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -218,11 +230,14 @@ dependencies = [
  "clap",
  "digest",
  "ecdsa",
+ "ed25519",
+ "ed25519-dalek",
  "elliptic-curve",
  "k256",
  "notify",
  "p256",
  "p384",
+ "pkcs8 0.9.0",
  "rand",
  "rsa",
  "serde",
@@ -242,6 +257,29 @@ dependencies = [
  "elliptic-curve",
  "rfc6979",
  "signature",
+]
+
+[[package]]
+name = "ed25519"
+version = "1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e9c280362032ea4203659fc489832d0204ef09f247a0506f170dafcac08c369"
+dependencies = [
+ "pkcs8 0.9.0",
+ "signature",
+]
+
+[[package]]
+name = "ed25519-dalek"
+version = "1.0.1"
+source = "git+https://github.com/stephank/ed25519-dalek.git?branch=relax-zeroize#5df5c8a0e18f79b90e2c24bd5ef879a9df0c7a90"
+dependencies = [
+ "curve25519-dalek",
+ "ed25519",
+ "rand",
+ "serde",
+ "sha2",
+ "zeroize",
 ]
 
 [[package]]

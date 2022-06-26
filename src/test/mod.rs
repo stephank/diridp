@@ -139,3 +139,8 @@ fn es384() -> Result<()> {
 fn es256k() -> Result<()> {
     run_alg_test(Box::new(algs::Es256kAlg))
 }
+
+#[test]
+fn ed25519() -> Result<()> {
+    run_alg_test(Box::new(algs::Ed25519Alg))
+}
