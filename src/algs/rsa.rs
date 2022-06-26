@@ -43,6 +43,10 @@ impl AlgorithmMatcher for RsaMatcher {
 }
 
 impl Algorithm for RsaAlg {
+    fn alg(&self) -> &str {
+        &self.alg
+    }
+
     fn load_key_pair(&self, path: &Path) -> Result<KeyHandle> {
         let key = RsaPrivateKey::read_pkcs8_pem_file(&path)
             .with_context(|| format!("Failed to read RSA key pair {path:?}"))?;

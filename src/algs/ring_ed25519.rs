@@ -29,6 +29,10 @@ impl AlgorithmMatcher for Ed25519Matcher {
 }
 
 impl Algorithm for Ed25519Alg {
+    fn alg(&self) -> &str {
+        "EdDSA"
+    }
+
     fn load_key_pair(&self, path: &Path) -> Result<KeyHandle> {
         let pem = fs::read(path)
             .with_context(|| format!("Failed to read Ed25519 key pair at {path:?}"))?;

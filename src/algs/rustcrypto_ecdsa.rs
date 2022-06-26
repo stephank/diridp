@@ -33,6 +33,10 @@ macro_rules! define_ecdsa_alg {
         }
 
         impl Algorithm for $alg_struct {
+            fn alg(&self) -> &str {
+                $alg
+            }
+
             fn load_key_pair(&self, path: &Path) -> Result<KeyHandle> {
                 let alg = $alg;
                 let pem = fs::read(path)

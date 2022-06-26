@@ -303,7 +303,7 @@ fn init_provider(
         keys,
     };
 
-    // Write a the JWKs file. Even if keys didn't change, we do a write here to check the path is
+    // Write the JWKs file. Even if keys didn't change, we do a write here to check the path is
     // writable at startup, so we can fail early if it is not.
     update_keys::write_jwks(&provider)
         .with_context(|| format!("Failed to write JWKs document {:?}", provider.jwks_path))?;

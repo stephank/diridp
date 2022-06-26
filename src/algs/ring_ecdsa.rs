@@ -59,6 +59,10 @@ impl EcdsaAlg {
 }
 
 impl Algorithm for EcdsaAlg {
+    fn alg(&self) -> &str {
+        &self.alg
+    }
+
     fn load_key_pair(&self, path: &Path) -> Result<KeyHandle> {
         let alg = self.alg.as_str();
         let pem =

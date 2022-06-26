@@ -76,3 +76,42 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<()> {
     fs::rename(&tmp_path, &path)
         .with_context(|| format!("Failed to move temporary file {tmp_path:?} in place at {path:?}"))
 }
+
+/// Slugify to create a default provider name from its issuer.
+pub fn issuer_slug(input: &str) -> String {
+    // Common case: HTTPS origin. Use just the hostname in that case.
+    let shortened = if let Some(host) = input
+        .strip_prefix("https://")
+        .filter(|host| !host.contains('/'))
+    {
+        host
+    } else {
+        input
+    };
+
+    // Basic slugify.
+    shortened
+        .split(|c: char| !c.is_alphanumeric() && !matches!(c, '.' | '-' | '_'))
+        .filter(|s| !s.is_empty())
+        .map(|s| s.trim_start_matches(|c| matches!(c, '.' | '-')))
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_issuer_slug() {
+        for (input, output) in [
+            ("https://example.com", "example.com"),
+            ("https://example.com:8080", "example.com_8080"),
+            ("http://example.com", "http_example.com"),
+            ("TEST  1 2 3 @@", "TEST_1_2_3"),
+            ("nøn-äscíì", "nøn-äscíì"),
+            ("--try-flag", "try-flag"),
+            (".try hidden", "try_hidden"),
+        ] {
+            assert_eq!(super::issuer_slug(input), output);
+        }
+    }
+}

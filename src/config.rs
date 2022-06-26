@@ -1,9 +1,14 @@
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
+    fmt,
+    marker::PhantomData,
     path::{Component, PathBuf},
 };
 
-use serde::{de::Error, Deserialize, Deserializer};
+use serde::{
+    de::{Error, Visitor},
+    Deserialize, Deserializer,
+};
 use serde_json::{Map, Value};
 
 use crate::algs::{Algorithm, MATCHERS};
@@ -13,6 +18,7 @@ use crate::algs::{Algorithm, MATCHERS};
 pub struct Top {
     #[serde(default = "default_state_dir")]
     pub state_dir: PathBuf,
+    #[serde(deserialize_with = "deserialize_map_or_list")]
     pub providers: HashMap<String, Provider>,
 }
 
@@ -26,6 +32,7 @@ pub struct Provider {
     pub jwks_path: String,
     pub jwks_uri: Option<String>,
 
+    #[serde(deserialize_with = "deserialize_map_or_list")]
     pub keys: HashMap<String, KeyChain>,
 
     #[serde(default)]
@@ -169,4 +176,86 @@ where
     matched
         .create_algorithm(config.alg, config.rest)
         .map_err(D::Error::custom)
+}
+
+/// Provides a default name for the list case in `deserialize_map_or_list`.
+trait DefaultName {
+    fn default_name(&self) -> String;
+}
+
+impl DefaultName for Provider {
+    fn default_name(&self) -> String {
+        crate::util::issuer_slug(&self.issuer)
+    }
+}
+
+impl DefaultName for KeyChain {
+    fn default_name(&self) -> String {
+        self.alg.alg().into()
+    }
+}
+
+/// Accept either a map or list, and decode either to a map.
+///
+/// When a list is found, the DefaultName trait is used to determine keys in the map.
+fn deserialize_map_or_list<'de, D, T>(deserializer: D) -> Result<HashMap<String, T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de> + DefaultName,
+{
+    struct MapOrListVisitor<T> {
+        _phantom: PhantomData<T>,
+    }
+
+    impl<'de, T> Visitor<'de> for MapOrListVisitor<T>
+    where
+        T: Deserialize<'de> + DefaultName,
+    {
+        type Value = HashMap<String, T>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a map or list")
+        }
+
+        fn visit_map<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::MapAccess<'de>,
+        {
+            let mut map = HashMap::with_capacity(access.size_hint().unwrap_or(0));
+            while let Some((key, value)) = access.next_entry()? {
+                match map.entry(key) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(value);
+                    }
+                    Entry::Occupied(entry) => {
+                        return Err(A::Error::custom(format!("duplicate key `{}`", entry.key())))
+                    }
+                }
+            }
+            Ok(map)
+        }
+
+        fn visit_seq<A>(self, mut access: A) -> Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut map = HashMap::with_capacity(access.size_hint().unwrap_or(0));
+            while let Some(value) = access.next_element::<T>()? {
+                let key = value.default_name();
+                match map.entry(key) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(value);
+                    }
+                    Entry::Occupied(entry) => {
+                        return Err(A::Error::custom(format!("duplicate key `{}`", entry.key())))
+                    }
+                }
+            }
+            Ok(map)
+        }
+    }
+
+    deserializer.deserialize_any(MapOrListVisitor {
+        _phantom: PhantomData,
+    })
 }

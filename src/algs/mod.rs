@@ -41,6 +41,9 @@ pub trait AlgorithmMatcher {
 
 /// Trait object that holds algorithm parameters and implements algorithm details.
 pub trait Algorithm: Send + Sync {
+    /// Return the JWS `alg` value.
+    fn alg(&self) -> &str;
+
     /// Load an existing key pair from a file based on the index entry.
     fn load_key_pair(&self, path: &Path) -> Result<KeyHandle>;
 
