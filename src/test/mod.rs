@@ -77,6 +77,7 @@ fn run_alg_test(alg: Box<dyn Algorithm>) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "rsa")]
 #[test]
 fn rs256() -> Result<()> {
     run_alg_test(Box::new(algs::RsaAlg {
@@ -85,6 +86,7 @@ fn rs256() -> Result<()> {
     }))
 }
 
+#[cfg(feature = "rsa")]
 #[test]
 fn rs384() -> Result<()> {
     run_alg_test(Box::new(algs::RsaAlg {
@@ -93,6 +95,7 @@ fn rs384() -> Result<()> {
     }))
 }
 
+#[cfg(feature = "rsa")]
 #[test]
 fn rs512() -> Result<()> {
     run_alg_test(Box::new(algs::RsaAlg {
@@ -101,6 +104,7 @@ fn rs512() -> Result<()> {
     }))
 }
 
+#[cfg(feature = "rsa")]
 #[test]
 fn ps256() -> Result<()> {
     run_alg_test(Box::new(algs::RsaAlg {
@@ -109,6 +113,7 @@ fn ps256() -> Result<()> {
     }))
 }
 
+#[cfg(feature = "rsa")]
 #[test]
 fn ps384() -> Result<()> {
     run_alg_test(Box::new(algs::RsaAlg {
@@ -117,6 +122,7 @@ fn ps384() -> Result<()> {
     }))
 }
 
+#[cfg(feature = "rsa")]
 #[test]
 fn ps512() -> Result<()> {
     run_alg_test(Box::new(algs::RsaAlg {
@@ -125,21 +131,35 @@ fn ps512() -> Result<()> {
     }))
 }
 
+#[cfg(any(feature = "ring", feature = "rustcrypto"))]
 #[test]
 fn es256() -> Result<()> {
-    run_alg_test(Box::new(algs::Es256Alg))
+    #[cfg(feature = "ring")]
+    return run_alg_test(Box::new(algs::EcdsaAlg {
+        alg: "ES256".into(),
+    }));
+    #[cfg(feature = "rustcrypto")]
+    return run_alg_test(Box::new(algs::Es256Alg));
 }
 
+#[cfg(any(feature = "ring", feature = "rustcrypto"))]
 #[test]
 fn es384() -> Result<()> {
-    run_alg_test(Box::new(algs::Es384Alg))
+    #[cfg(feature = "ring")]
+    return run_alg_test(Box::new(algs::EcdsaAlg {
+        alg: "ES384".into(),
+    }));
+    #[cfg(feature = "rustcrypto")]
+    return run_alg_test(Box::new(algs::Es384Alg));
 }
 
+#[cfg(feature = "rustcrypto")]
 #[test]
 fn es256k() -> Result<()> {
     run_alg_test(Box::new(algs::Es256kAlg))
 }
 
+#[cfg(any(feature = "ring", feature = "rustcrypto"))]
 #[test]
 fn ed25519() -> Result<()> {
     run_alg_test(Box::new(algs::Ed25519Alg))

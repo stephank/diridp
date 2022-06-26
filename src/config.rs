@@ -161,17 +161,10 @@ where
     }
     let config = AlgConfig::deserialize(deserializer)?;
 
-    let mut matched_iter = MATCHERS
+    let matched = MATCHERS
         .iter()
-        .filter(|matcher| matcher.matches_config(&config.alg, &config.rest));
-    let matched = matched_iter
-        .next()
+        .find(|matcher| matcher.matches_config(&config.alg, &config.rest))
         .ok_or_else(|| D::Error::custom("did not match any algorithm implementation"))?;
-    if matched_iter.next().is_some() {
-        return Err(D::Error::custom(
-            "matched multiple algorithm implementations",
-        ));
-    }
 
     matched
         .create_algorithm(config.alg, config.rest)

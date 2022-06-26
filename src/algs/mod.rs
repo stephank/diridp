@@ -1,15 +1,33 @@
-mod ecdsa;
-mod ed25519;
+#[cfg(feature = "rsa")]
 mod rsa;
+
+#[cfg(feature = "ring")]
+mod ring_ecdsa;
+#[cfg(feature = "ring")]
+mod ring_ed25519;
+
+#[cfg(feature = "rustcrypto")]
+mod rustcrypto_ecdsa;
+#[cfg(feature = "rustcrypto")]
+mod rustcrypto_ed25519;
 
 use std::{any::Any, path::Path, sync::Arc};
 
 use anyhow::Result;
 use serde_json::{Map, Value};
 
-pub use self::ecdsa::*;
-pub use self::ed25519::*;
+#[cfg(feature = "rsa")]
 pub use self::rsa::*;
+
+#[cfg(feature = "ring")]
+pub use self::ring_ecdsa::*;
+#[cfg(feature = "ring")]
+pub use self::ring_ed25519::*;
+
+#[cfg(feature = "rustcrypto")]
+pub use self::rustcrypto_ecdsa::*;
+#[cfg(feature = "rustcrypto")]
+pub use self::rustcrypto_ed25519::*;
 
 /// Trait object used to find the correct algorithm matching a key configuration.
 pub trait AlgorithmMatcher {
@@ -43,5 +61,17 @@ pub trait Algorithm: Send + Sync {
 pub type KeyHandle = Arc<dyn Any + Send + Sync>;
 
 /// List of all AlgorithmMatchers.
-pub const MATCHERS: &[&dyn AlgorithmMatcher] =
-    &[&Es256Matcher, &Es384Matcher, &Ed25519Matcher, &RsaMatcher];
+pub const MATCHERS: &[&dyn AlgorithmMatcher] = &[
+    #[cfg(feature = "rsa")]
+    &RsaMatcher,
+    #[cfg(feature = "ring")]
+    &EcdsaMatcher,
+    #[cfg(feature = "rustcrypto")]
+    &Es256Matcher,
+    #[cfg(feature = "rustcrypto")]
+    &Es384Matcher,
+    #[cfg(feature = "rustcrypto")]
+    &Es256kMatcher,
+    #[cfg(any(feature = "ring", feature = "rustcrypto"))]
+    &Ed25519Matcher,
+];
