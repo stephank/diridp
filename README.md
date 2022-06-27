@@ -20,8 +20,10 @@ A minimal config looks like:
 
 ```yaml
 providers:
-  main:
-    issuer: "https://example.com"
+  - issuer: "https://example.com"
+    keys:
+      - alg: EdDSA
+        crv: Ed25519
     tokens:
       - path: "/run/diridp/my-application/token"
         claims:
@@ -167,8 +169,10 @@ by creating directories:
 
 ```yaml
 providers:
-  main:
-    issuer: "https://example.com"
+  - issuer: "https://example.com"
+    keys:
+      - alg: EdDSA
+        crv: Ed25519
     tokens:
       - path: "/run/diridp/containers/:sub/aws_token"
         claims:

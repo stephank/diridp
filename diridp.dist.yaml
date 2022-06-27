@@ -15,29 +15,15 @@ state_dir: "/var/lib/diridp"
 # REQUIRED: One or more provider configurations.
 #
 # Each provider entry defines a unique issuer with its own keys. The name of
-# the entry is for logging purposes only.
+# the entry can be considered private; it is used for logging purposes, and as
+# a default state subdirectory name.
+#
+# This can also be a list instead of map, in which case names are automatically
+# derived from `issuer`.
 providers:
   main:
     # REQUIRED: Issuer for the token `iss` claim and the discovery document.
     issuer: "https://example.com"
-
-    # Directory where keys are stored.
-    #
-    # If not set, derived as: `<state_dir>/<provider>/keys`
-    #
-    # This directory will be created if it does not exist, and permissions will
-    # be set to 0700 (only accessible by the owner).
-    keys_dir: "/var/lib/diridp/test/keys"
-
-    # Duration a key is used, before being rotated.
-    key_lifespan: 86400 # 1 day
-
-    # Duration before and after key lifespan during which the key is still
-    # announced. This should be larger than the Cache-Control age you apply to
-    # the webroot from which public keys are served.
-    #
-    # If not set, derived as: key_lifespan / 4
-    key_publish_margin: 21600
 
     # Directory where public web files are written.
     #
@@ -51,7 +37,7 @@ providers:
 
     # Absolute URL to the JWKs document, as set in the discovery document.
     #
-    # If not set, derived as: webroot + jwks_path
+    # If not set, derived as: issuer + jwks_path
     jwks_uri: "https://example.com/jwks.json"
 
     # Any additional claims added to all tokens of this provider.
@@ -60,6 +46,74 @@ providers:
     claims:
       # Just an example. It's often more useful to add claims per-token.
       locale: "nl-NL"
+
+    # REQUIRED: One or more configurations for signing keys.
+    #
+    # If more than one key is configured here, token configurations below must
+    # specify a `key_name`. The name of the key is simply the `alg` by default,
+    # but in complicated setups this may run into conflicts. In that case, you
+    # can use a map here, instead of a list, and manually assign names.
+    #
+    # The following example sections demonstrate all the supported types of
+    # signing keys, roughly in order of preference.
+    keys:
+
+      # EdDSA using curve25519 and SHA512. This is an all-around good first
+      # choice if the service you wish to use the tokens with supports it, but
+      # support is likely limited.
+      - alg: EdDSA
+        crv: Ed25519
+
+      # ECDSA using the NIST P-256 curve, and SHA256. This is the most widely
+      # supported elliptic curve cryptography implementation.
+      - alg: ES256
+
+      # RSA-PSS using SHA256. This is preferred over RS256 if supported, but
+      # support may be limited,
+      - alg: PS256
+
+        # RSA algorithms allow specifying a key size. The default is 2048-bits,
+        # and while you may choose a smaller size, many verifiers are now
+        # rejecting keys smaller than 2048 bits. Larger sizes are usually only
+        # needed when there are specific security requirements.
+        key_size: 2048
+
+      # RSA-PKCS#1 using SHA256. This is the most widely supported of all
+      # algorithms, but one of the more modern alternatives above should be
+      # preferred, if possible.
+      - alg: RS256
+
+        # Optional, same as for PS256.
+        key_size: 2048
+
+      # These variants of the above are also supported, but typically only
+      # useful when there is a specific security requirement.
+      - alg: ES384
+      - alg: PS384
+      - alg: PS512
+      - alg: RS384
+      - alg: RS512
+
+        # The following are common properties supported by ALL algorithms.
+        # These are all optional and listed with their defaults.
+
+        # Directory where keys are stored.
+        #
+        # If not set, derived as: `<state_dir>/<provider>/keys/<key>`
+        #
+        # This directory will be created if it does not exist, and permissions will
+        # be set to 0700 (only accessible by the owner).
+        dir: "/var/lib/diridp/main/keys/RS512"
+
+        # Duration a key is used, before being rotated.
+        lifespan: 86400 # 1 day
+
+        # Duration before and after key lifespan during which the key is still
+        # announced. This should be larger than the Cache-Control age you apply to
+        # the webroot from which public keys are served.
+        #
+        # If not set, derived as: lifespan / 4
+        publish_margin: 21600
 
     # REQUIRED: One or more tokens issued by this provider.
     tokens:
@@ -84,6 +138,10 @@ providers:
         #
         path: "/run/diridp/my-application/token"
 
+        # Which signing key from the `keys` section to use for this token.
+        # REQUIRED IF there are multiple keys configured.
+        key_name: EdDSA
+
         # Duration the token is valid.
         lifespan: 3600
 
@@ -103,7 +161,8 @@ providers:
         #
         # Note that `iss`, `iat`, `exp` and `nbf` are automatically set.
         #
-        # If provider claims were specified, these are applied on top.
+        # If provider claims were also specified, the two are merged together,
+        # with token claims taking precedence on conflict.
         claims:
           # RECOMMENDED: Clients typically require `sub` and `aud` claims.
           sub: "my-application"
