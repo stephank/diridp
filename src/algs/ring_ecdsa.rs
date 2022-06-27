@@ -98,14 +98,6 @@ impl Algorithm for EcdsaAlg {
         })
     }
 
-    fn create_header(&self, kid: &str, _key: &KeyHandle) -> String {
-        serde_json::to_string(&json!({
-            "kid": kid,
-            "alg": self.alg,
-        }))
-        .expect("Failed to serialize JWT header")
-    }
-
     fn sign(&self, data: &[u8], key: &KeyHandle) -> Result<Vec<u8>> {
         let key = key.clone().downcast::<EcdsaKeyPair>().unwrap();
         let alg = self.alg.as_str();

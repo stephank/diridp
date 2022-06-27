@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{Context, Error, Result};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::{
     log, state,
@@ -167,7 +167,11 @@ where
     let key_pair = key_chain.current.clone();
 
     // Build the JWT.
-    let header = key_chain.alg.create_header(&key_pair.id, &key_pair.inner);
+    let header = serde_json::to_string(&json!({
+        "kid": &key_pair.id,
+        "alg": key_chain.alg.alg(),
+    }))
+    .expect("Failed to serialize JWT header");
 
     let mut payload = claims_fn();
     payload.insert("iat".to_string(), unix_time(now).into());

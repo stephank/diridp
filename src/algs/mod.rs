@@ -53,9 +53,6 @@ pub trait Algorithm: Send + Sync {
     /// Serialize a key to JWK format.
     fn to_jwk(&self, kid: &str, key: &KeyHandle) -> Value;
 
-    /// Build a header for a JWT with the given key ID.
-    fn create_header(&self, kid: &str, key: &KeyHandle) -> String;
-
     /// Sign data using the given key.
     fn sign(&self, data: &[u8], key: &KeyHandle) -> Result<Vec<u8>>;
 }

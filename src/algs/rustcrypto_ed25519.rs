@@ -67,14 +67,6 @@ impl Algorithm for Ed25519Alg {
         })
     }
 
-    fn create_header(&self, kid: &str, _key: &KeyHandle) -> String {
-        serde_json::to_string(&json!({
-            "kid": kid,
-            "alg": "EdDSA",
-        }))
-        .expect("Failed to serialize JWT header")
-    }
-
     fn sign(&self, data: &[u8], key: &KeyHandle) -> Result<Vec<u8>> {
         let key = key.clone().downcast::<Keypair>().unwrap();
         match key.try_sign(data) {

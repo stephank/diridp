@@ -78,14 +78,6 @@ macro_rules! define_ecdsa_alg {
                 })
             }
 
-            fn create_header(&self, kid: &str, _key: &KeyHandle) -> String {
-                serde_json::to_string(&json!({
-                    "kid": kid,
-                    "alg": $alg,
-                }))
-                .expect("Failed to serialize JWT header")
-            }
-
             fn sign(&self, data: &[u8], key: &KeyHandle) -> Result<Vec<u8>> {
                 let alg = $alg;
                 let key = key.clone().downcast::<SecretKey<$curve>>().unwrap();
