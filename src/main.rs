@@ -13,6 +13,7 @@ mod util;
 mod test;
 
 use std::{
+    collections::{HashMap, HashSet},
     fs::{self, Permissions},
     io::ErrorKind,
     os::unix::prelude::PermissionsExt,
@@ -274,10 +275,16 @@ fn init_provider(
             .with_context(|| format!("Failed to initialize key '{name}' / '{key_name}'"))?;
             Ok((key_name, key_chain))
         })
-        .collect::<Result<_>>()?;
+        .collect::<Result<HashMap<_, _>>>()?;
 
     // Write OpenID Connect discovery document.
     // Use atomic write, because a webserver may be serving this.
+    let mut seen = HashSet::new();
+    let algs: Vec<_> = keys
+        .values()
+        .map(|key| key.alg.alg())
+        .filter(|alg| seen.insert(alg.to_string()))
+        .collect();
     atomic_write(
         &oidc_config_path,
         serde_json::to_string_pretty(&json!({
@@ -289,7 +296,7 @@ fn init_provider(
             "scopes_supported": ["openid"],
             "response_types_supported": ["id_token"],
             "subject_types_supported": ["public"],
-            "id_token_signing_alg_values_supported": ["RS256"],
+            "id_token_signing_alg_values_supported": algs,
         }))
         .expect("Failed to serialize discovery document")
         .as_bytes(),
