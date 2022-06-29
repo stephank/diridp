@@ -1,6 +1,6 @@
 use std::{fs, path::Path, sync::Arc};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use ring::{
     rand::SystemRandom,
     signature::{self, EcdsaKeyPair, EcdsaSigningAlgorithm, KeyPair},
@@ -67,7 +67,13 @@ impl Algorithm for EcdsaAlg {
         let alg = self.alg.as_str();
         let pem =
             fs::read(path).with_context(|| format!("Failed to read {alg} key pair at {path:?}"))?;
-        let key = EcdsaKeyPair::from_pkcs8(self.params(), &pem)
+        let (label, der) = pem_rfc7468::decode_vec(&pem)
+            .with_context(|| format!("Failed to decode {alg} key pair at {path:?}"))?;
+        ensure!(
+            label == "PRIVATE KEY",
+            "PEM label at {path:?} invalid for an {alg} key pair"
+        );
+        let key = EcdsaKeyPair::from_pkcs8(self.params(), &der)
             .with_context(|| format!("Failed to parse {alg} key pair at {path:?}"))?;
         Ok(Arc::new(key))
     }
@@ -75,12 +81,17 @@ impl Algorithm for EcdsaAlg {
     fn generate(&self, path: &Path) -> Result<KeyHandle> {
         let alg = self.alg.as_str();
         let params = self.params();
-        let pem = EcdsaKeyPair::generate_pkcs8(params, &SystemRandom::new())
+
+        let der = EcdsaKeyPair::generate_pkcs8(params, &SystemRandom::new())
             .map_err(|_| anyhow!("Failed to generate {alg} key pair"))?;
-        let key = EcdsaKeyPair::from_pkcs8(params, pem.as_ref())
+        let key = EcdsaKeyPair::from_pkcs8(params, der.as_ref())
             .expect("Failed to parse generated {alg} key pair");
+
+        let pem = pem_rfc7468::encode_string("PRIVATE KEY", Default::default(), der.as_ref())
+            .expect("Failed to encode generated key pair as PEM");
         fs::write(path, pem)
             .with_context(|| format!("Failed to write {alg} key pair to {path:?}"))?;
+
         Ok(Arc::new(key))
     }
 

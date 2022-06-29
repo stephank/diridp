@@ -1,6 +1,6 @@
 use std::{fs, path::Path, sync::Arc};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use ring::{
     rand::SystemRandom,
     signature::{Ed25519KeyPair, KeyPair},
@@ -36,18 +36,28 @@ impl Algorithm for Ed25519Alg {
     fn load_key_pair(&self, path: &Path) -> Result<KeyHandle> {
         let pem = fs::read(path)
             .with_context(|| format!("Failed to read Ed25519 key pair at {path:?}"))?;
-        let key = Ed25519KeyPair::from_pkcs8(&pem)
+        let (label, der) = pem_rfc7468::decode_vec(&pem)
+            .with_context(|| format!("Failed to decode Ed25519 key pair at {path:?}"))?;
+        ensure!(
+            label == "PRIVATE KEY",
+            "PEM label at {path:?} invalid for an Ed25519 key pair"
+        );
+        let key = Ed25519KeyPair::from_pkcs8(&der)
             .with_context(|| format!("Failed to parse Ed25519 key pair at {path:?}"))?;
         Ok(Arc::new(key))
     }
 
     fn generate(&self, path: &Path) -> Result<KeyHandle> {
-        let pem = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
+        let der = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
             .map_err(|_| anyhow!("Failed to generate Ed25519 key pair"))?;
-        let key = Ed25519KeyPair::from_pkcs8(pem.as_ref())
+        let key = Ed25519KeyPair::from_pkcs8(der.as_ref())
             .expect("Failed to parse generated Ed25519 key pair");
+
+        let pem = pem_rfc7468::encode_string("PRIVATE KEY", Default::default(), der.as_ref())
+            .expect("Failed to encode generated key pair as PEM");
         fs::write(path, pem)
             .with_context(|| format!("Failed to write Ed25519 key pair to {path:?}"))?;
+
         Ok(Arc::new(key))
     }
 
