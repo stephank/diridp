@@ -56,6 +56,10 @@ An example service configuration:
     providers.main = {
       issuer = "https://example.com";
       vhost.nginx = true;
+      keys.main = {
+        alg = "EdDSA";
+        crv = "Ed25519";
+      ];
       tokens = [
         {
           path = "/run/diridp/my-application/token";

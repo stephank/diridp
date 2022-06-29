@@ -125,12 +125,75 @@ let
       '';
     };
 
+    keys = mkOption {
+      type = types.attrsOf (types.submodule {
+        options = keyOptions;
+      });
+      default = { };
+      description = ''
+        One or more configurations for signing keys.
+      '';
+    };
+
     tokens = mkOption {
       type = types.listOf (types.submodule {
         options = tokenOptions;
       });
+      default = [ ];
       description = ''
         One or more tokens issued by this provider.
+      '';
+    };
+
+  };
+
+  keyOptions = {
+
+    alg = mkOption {
+      type = types.str;
+      description = ''
+        Signing algorithm for this key.
+      '';
+    };
+
+    crv = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        For EdDSA, the curve to use.
+      '';
+    };
+
+    keySize = mkOption {
+      type = types.nullOr types.ints.positive;
+      default = null;
+      description = ''
+        For RSA, the size of the generated keys.
+      '';
+    };
+
+    dir = mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      description = ''
+        Optional custom path to store keys.
+      '';
+    };
+
+    lifespan = mkOption {
+      type = types.nullOr types.ints.positive;
+      default = null;
+      description = ''
+        Duration in seconds a key is used, before being rotated.
+      '';
+    };
+
+    publishMargin = mkOption {
+      type = types.nullOr types.ints.positive;
+      default = null;
+      description = ''
+        Duration in seconds before and after key lifespan during which the key
+        is still announced.
       '';
     };
 
@@ -152,6 +215,14 @@ let
         correct permissions on service start.
       '';
       example = "/run/diridp/my-application/token";
+    };
+
+    keyName = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        If multiple keys are configured, which one to use for this token.
+      '';
     };
 
     claims = mkOption {
@@ -210,12 +281,56 @@ let
 
   cfg = config.services.diridp;
 
+  supportedAlgorithms = [
+    "EdDSA"
+    "ES256" "ES384"
+    "PS256" "PS384" "PS512"
+    "RS256" "RS384" "RS512"
+  ];
+
+  # Convert a string to snake case.
+  # This only covers some of the known inputs in this module.
+  toSnakeCase = input: pipe input [
+    (builtins.split "([[:upper:]]+)")
+    (concatMapStrings (s: if isList s then "_${toLower (head s)}" else s))
+  ];
+
+  # Common transformations on an attribute set for our YAML config output.
+  prepareConfigSection = attrs: pipe attrs [
+    (filterAttrs (name: value: value != null))
+    (mapAttrs' (name: nameValuePair (toSnakeCase name)))
+  ];
+
+  # Prepare the configuration file and perform checks.
   configFile = (pkgs.formats.yaml { }).generate "diridp.yaml" {
-    providers = mapAttrs (name: provider: {
-      inherit (provider) issuer claims tokens;
-    }) cfg.providers;
+    providers = mapAttrs (name: provider:
+      let
+        numKeys = length (attrNames provider.keys);
+      in prepareConfigSection ({
+        inherit (provider) issuer claims;
+        keys = mapAttrs (name: key:
+          # 'alg' must be one of the supported algorithms.
+          assert elem key.alg supportedAlgorithms;
+          # 'crv' is required for EdDSA.
+          assert key.alg == "EdDSA" -> key.crv != null;
+          # 'crv' can only be used with EdDSA.
+          assert key.crv != null -> key.alg == "EdDSA";
+          # 'keySize' can only be used with the RSA family.
+          assert key.keySize != null -> (hasPrefix "RS" key.alg) || (hasPrefix "PS" key.alg);
+          prepareConfigSection key
+        ) provider.keys;
+        tokens = map (token:
+          # 'keyName' is required if there are multiple keys.
+          assert token.keyName == null -> numKeys == 1;
+          # 'keyName' must match a configured key.
+          assert token.keyName != null -> hasAttr token.keyName provider.keys;
+          prepareConfigSection token
+        ) provider.tokens;
+      })
+    ) cfg.providers;
   };
 
+  # Prepare the startup script that creates directories.
   preStartScript = pkgs.writeShellScript "diridp-dirs" (concatStringsSep "\n" (map (dir: ''
     install -d \
       -o ${escapeShellArg dir.owner} \
