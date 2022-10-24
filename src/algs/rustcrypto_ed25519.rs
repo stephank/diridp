@@ -49,7 +49,7 @@ impl Algorithm for Ed25519Alg {
         let key = Keypair::generate(&mut rand::thread_rng());
         let pem = KeypairBytes::from_bytes(&key.to_bytes())
             .to_pkcs8_pem(Default::default())
-            .with_context(|| format!("Failed to serialize Ed25519 key pair"))?;
+            .context("Failed to serialize Ed25519 key pair")?;
         fs::write(path, pem)
             .with_context(|| format!("Failed to write Ed25519 key pair to {path:?}"))?;
         Ok(Arc::new(key))

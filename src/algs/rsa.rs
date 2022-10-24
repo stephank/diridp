@@ -1,13 +1,20 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{Context, Error, Result};
-use digest::{Digest, DynDigest};
+use digest::Digest;
 use rsa::{
+    pkcs1v15::SigningKey,
     pkcs8::{DecodePrivateKey, EncodePrivateKey},
-    Hash, PublicKeyParts, RsaPrivateKey,
+    pss::BlindedSigningKey,
+    PublicKeyParts, RsaPrivateKey,
 };
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
+use sha2::{Sha256, Sha384, Sha512};
+use signature::RandomizedSigner;
 
 use crate::util::base64url;
 
@@ -22,6 +29,9 @@ pub struct RsaAlg {
     #[serde(default = "default_key_size")]
     pub key_size: usize,
 }
+
+// We need to be able to take ownership. See comments in `sign()`.
+type KeyContainer = Mutex<Option<RsaPrivateKey>>;
 
 impl AlgorithmMatcher for RsaMatcher {
     fn matches_config(&self, alg: &str, _rest: &Map<String, Value>) -> bool {
@@ -50,7 +60,7 @@ impl Algorithm for RsaAlg {
     fn load_key_pair(&self, path: &Path) -> Result<KeyHandle> {
         let key = RsaPrivateKey::read_pkcs8_pem_file(&path)
             .with_context(|| format!("Failed to read RSA key pair {path:?}"))?;
-        Ok(Arc::new(key))
+        Ok(Arc::new(Mutex::new(Some(key))))
     }
 
     fn generate(&self, path: &Path) -> Result<KeyHandle> {
@@ -61,11 +71,13 @@ impl Algorithm for RsaAlg {
         key.write_pkcs8_pem_file(&path, Default::default())
             .with_context(|| format!("Failed to write RSA key pair to {path:?}"))?;
 
-        Ok(Arc::new(key))
+        Ok(Arc::new(Mutex::new(Some(key))))
     }
 
     fn to_jwk(&self, kid: &str, key: &KeyHandle) -> Value {
-        let key = key.clone().downcast::<RsaPrivateKey>().unwrap();
+        let key = key.clone().downcast::<KeyContainer>().unwrap();
+        let key = key.lock().unwrap();
+        let key = key.as_ref().unwrap();
         json!({
             "kid": kid,
             "use": "sig",
@@ -77,37 +89,57 @@ impl Algorithm for RsaAlg {
     }
 
     fn sign(&self, data: &[u8], key: &KeyHandle) -> Result<Vec<u8>> {
-        let key = key.clone().downcast::<RsaPrivateKey>().unwrap();
+        let key = key.clone().downcast::<KeyContainer>().unwrap();
+        let mut key = key.lock().unwrap();
 
-        let (mut hasher, hash_kind): (Box<dyn DynDigest>, Hash) = match self.alg.as_str() {
-            "RS256" | "PS256" => (Box::new(sha2::Sha256::new()), Hash::SHA2_256),
-            "RS384" | "PS384" => (Box::new(sha2::Sha384::new()), Hash::SHA2_384),
-            "RS512" | "PS512" => (Box::new(sha2::Sha512::new()), Hash::SHA2_512),
+        // The `rsa` crate types require wrapping the RsaPrivateKey inside a SigningKey, taking
+        // ownership. This unfortunately means we have to do a little dance where we temporarily
+        // take ownership of the key, then place it back when we're done.
+        let owned_key = key.take().unwrap();
+
+        // The types here make it difficult to do something like `Box<dyn Signer>`, so we
+        // instead use macros to make this a little bit DRY.
+        macro_rules! sign {
+            ($key:expr) => {{
+                let key = $key;
+                let res = key.try_sign_with_rng(&mut rand::thread_rng(), data);
+                (
+                    key.into(),
+                    res.map(|signature| signature.to_vec()).map_err(Error::new),
+                )
+            }};
+        }
+
+        macro_rules! sign_ps {
+            ($digest:ty) => {
+                sign!(BlindedSigningKey::<$digest>::new_with_salt_len(
+                    owned_key,
+                    // Salt length should match message digest length for PSS.
+                    <$digest>::output_size(),
+                ))
+            };
+        }
+
+        macro_rules! sign_rs {
+            ($digest:ty) => {
+                sign!(SigningKey::<$digest>::new_with_prefix(owned_key))
+            };
+        }
+
+        let (owned_key, res) = match self.alg.as_str() {
+            "PS256" => sign_ps!(Sha256),
+            "PS384" => sign_ps!(Sha384),
+            "PS512" => sign_ps!(Sha512),
+            "RS256" => sign_rs!(Sha256),
+            "RS384" => sign_rs!(Sha384),
+            "RS512" => sign_rs!(Sha512),
             _ => unreachable!(),
         };
 
-        // Reset the hasher in case we use PSS padding, so it can be reused, because we want the
-        // MGF1 digest algorithm to match the message digest algorithm.
-        hasher.update(data);
-        let hash = hasher.finalize_reset();
+        // Place the key back into the container.
+        *key = Some(owned_key);
 
-        let padding = match self.alg.as_str() {
-            "RS256" | "RS384" | "RS512" => rsa::PaddingScheme::PKCS1v15Sign {
-                hash: Some(hash_kind),
-            },
-            "PS256" | "PS384" | "PS512" => {
-                // Salt length should match message digest length.
-                let salt_len = hasher.output_size();
-                rsa::PaddingScheme::PSS {
-                    salt_rng: Box::new(rand::thread_rng()),
-                    digest: hasher,
-                    salt_len: Some(salt_len),
-                }
-            }
-            _ => unreachable!(),
-        };
-
-        key.sign(padding, &hash).map_err(Error::new)
+        res
     }
 }
 
