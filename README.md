@@ -8,6 +8,11 @@ same machine to identify themselves to some third party service. Because diridp
 rotates all signing keys and tokens, these can replace otherwise permanent
 credentials that would be used instead.
 
+This readme contains mostly examples. For a little more explanation on how
+diridp and JWTs work, see the [introductory blog post].
+
+[introductory blog post]: https://stephank.nl/p/2022-06-20-diridp-replace-access-keys-with-public-key-crypto.html
+
 ## Usage
 
 - See [releases] for binaries
